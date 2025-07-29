@@ -1,5 +1,11 @@
 from os.path import basename as _basename, dirname as _dirname
 
+# NOTE: these are only imported for type checking
+from docutils.nodes import TextElement
+from sphinx.addnodes import pending_xref
+from sphinx.application import Sphinx
+from sphinx.environment import BuildEnvironment
+
 
 html_theme = "furo"
 html_show_sourcelink = True
@@ -10,6 +16,8 @@ autoclass_content = "class"
 
 copybutton_prompt_text = r">>> |\.\.\. |\$ |In \[\d*\]: | {2,5}\.\.\.: | {5,8}: "
 copybutton_prompt_is_regexp = True
+
+sphinxconfig_missing_reference_aliases: dict[str, str] = {}
 
 
 def linkcode_resolve(
@@ -66,6 +74,95 @@ def linkcode_resolve(
     return linkcode_url.format(
         filepath=filepath, linestart=linestart, linestop=linestop
     )
+
+
+def process_autodoc_missing_reference(
+        app: Sphinx,
+        env: BuildEnvironment,
+        node: pending_xref,
+        contnode: TextElement
+        ) -> TextElement | None:
+    """Fix missing references due to string annotations.
+
+    Users of this function should add it to the ``missing-reference`` event as
+
+    .. code:: python
+
+        def setup(app: Sphinx) -> None:
+            app.connect("missing-reference", process_autodoc_missing_reference)
+
+    This uses an alias dictionary called ``sphinxconfig_missing_reference_aliases``
+    that maps each unknown type to an reference type and actual type full name.
+    For example, say that the ``numpy.float64`` reference is not recognized
+    properly. We know that this object is in the ``numpy`` module as an attribute.
+    Then, we write:
+
+    .. code:: python
+
+        autodoc_missing_reference_aliases: dict[str, str] = {
+            "numpy.float64": "py:attr:numpy.float64",
+        }
+    """
+    from sphinx.util import logging
+    logger = logging.getLogger("sphinxconfig")
+
+    # check if this is a known alias
+    target = node["reftarget"]
+    if target not in sphinxconfig_missing_reference_aliases:
+        return None
+
+    # parse alias
+    fullname = sphinxconfig_missing_reference_aliases[target]
+    parts = fullname.split(":")
+    if len(parts) == 1:
+        domain = "py"
+        reftype = "obj"
+        reftarget, = parts
+    elif len(parts) == 2:
+        domain = "py"
+        reftype, reftarget = parts
+    elif len(parts) == 3:
+        domain, reftype, reftarget = parts
+    else:
+        logger.error("Could not parse alias for '%s': '%s'.", target, fullname)
+        return None
+
+    if domain != "py":
+        logger.error("Domain not supported for '%s': '%s'.", target, domain)
+        return None
+
+    # parse module and object from reftarget
+    parts = reftarget.split(".")
+    if len(parts) == 1:
+        inventory = module = objname = parts[0]
+    elif len(parts) >= 2:
+        inventory = parts[0]
+        module = ".".join(parts[:-1])
+        objname = parts[-1]
+    else:
+        logger.error("Could not parse reftarget for '%s': '%s'.", target, reftarget)
+        return None
+
+    # rewrite attributes
+    node.attributes["refdomain"] = domain
+    node.attributes["reftype"] = reftype
+    node.attributes[f"{domain}:module"] = module
+
+    # resolve reference
+    from sphinx.ext import intersphinx
+
+    if intersphinx.inventory_exists(env, inventory):
+        node.attributes["reftarget"] = reftarget
+
+        new_node = intersphinx.resolve_reference_in_inventory(
+            env, inventory, node, contnode)
+    else:
+        domain = env.get_domain(domain)
+        new_node = domain.resolve_xref(
+            env, node["refdoc"], app.builder, reftype, objname,
+            node, contnode)
+
+    return new_node
 
 
 extensions = [
