@@ -1,4 +1,5 @@
-from os.path import dirname as _dirname, basename as _basename
+from os.path import basename as _basename, dirname as _dirname
+
 
 html_theme = "furo"
 html_show_sourcelink = True
@@ -11,10 +12,14 @@ copybutton_prompt_text = r">>> |\.\.\. |\$ |In \[\d*\]: | {2,5}\.\.\.: | {5,8}: 
 copybutton_prompt_is_regexp = True
 
 
-def linkcode_resolve(domain, info, linkcode_url=None):
+def linkcode_resolve(
+        domain: str,
+        info: dict[str, str],
+        linkcode_url: str | None = None,
+        ) -> str | None:
+    import inspect
     import os
     import sys
-    import inspect
 
     if domain != "py" or not info["module"]:
         return None
@@ -38,9 +43,10 @@ def linkcode_resolve(domain, info, linkcode_url=None):
     try:
         modpath = os.path.dirname(os.path.dirname(inspect.getsourcefile(topmod)))
         filepath = os.path.relpath(inspect.getsourcefile(obj), modpath)
-        if filepath is None:
-            return
     except Exception:
+        return None
+
+    if filepath is None:
         return None
 
     try:
@@ -54,7 +60,7 @@ def linkcode_resolve(domain, info, linkcode_url=None):
         linkcode_url = (
             f"https://github.com/inducer/{project}/blob/"
             + "main"
-            + "/{filepath}#L{linestart}-L{linestop}"
+            + "/{filepath}#L{linestart}-L{linestop}"  # noqa: RUF027
         )
 
     return linkcode_url.format(
@@ -63,17 +69,21 @@ def linkcode_resolve(domain, info, linkcode_url=None):
 
 
 extensions = [
-        "sphinx.ext.autodoc",
-        "sphinx.ext.intersphinx",
-        "sphinx.ext.linkcode",
-        "sphinx.ext.doctest",
-        "sphinx.ext.mathjax",
-        "sphinx_copybutton",
-        ]
+    "sphinx.ext.autodoc",
+    "sphinx.ext.intersphinx",
+    "sphinx.ext.linkcode",
+    "sphinx.ext.doctest",
+    "sphinx.ext.mathjax",
+    "sphinx_copybutton",
+]
 
-__all__ = ("html_theme", "html_show_sourcelink",
-        "project", "autoclass_content",
-        "copybutton_prompt_text",
-        "copybutton_prompt_is_regexp",
-        "linkcode_resolve",
-        "extensions")
+__all__ = (
+    "autoclass_content",
+    "copybutton_prompt_is_regexp",
+    "copybutton_prompt_text",
+    "extensions",
+    "html_show_sourcelink",
+    "html_theme",
+    "linkcode_resolve",
+    "project",
+)
