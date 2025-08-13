@@ -1,7 +1,7 @@
 from os.path import basename as _basename, dirname as _dirname
 
 # NOTE: these are only imported for type checking
-from docutils.nodes import TextElement
+from docutils.nodes import Text, TextElement
 from sphinx.addnodes import pending_xref
 from sphinx.application import Sphinx
 from sphinx.environment import BuildEnvironment
@@ -80,7 +80,7 @@ def process_autodoc_missing_reference(
         app: Sphinx,
         env: BuildEnvironment,
         node: pending_xref,
-        contnode: TextElement
+        contnode: Text | TextElement
         ) -> TextElement | None:
     """Fix missing references due to string annotations.
 
@@ -147,6 +147,15 @@ def process_autodoc_missing_reference(
     node.attributes["refdomain"] = domain
     node.attributes["reftype"] = reftype
     node.attributes[f"{domain}:module"] = module
+
+    if isinstance(contnode, Text):
+        # NOTE: if the format is "short", we insist on using just the object name.
+        # This also makes sure that the text matches the reftarget, in case the
+        # object was renamed somehow (e.g. from `import Object as _Object`).
+        if app.config.autodoc_typehints_format == "short":
+            contnode = Text(objname)
+        else:
+            contnode = Text(reftarget)
 
     # resolve reference
     from sphinx.ext import intersphinx
